@@ -17,6 +17,19 @@ final class MockWeatherKitClient: WeatherKitForecasting, @unchecked Sendable {
         self.outcome = outcome
     }
 
+    static let stubAttribution = WeatherKitAttribution(
+        serviceName: "Apple Weather",
+        legalPageURL: URL(string: "https://weatherkit.apple.com/legal-attribution.html")!,
+        combinedMarkLightURL: URL(string: "https://example.com/light.png")!,
+        combinedMarkDarkURL: URL(string: "https://example.com/dark.png")!,
+        squareMarkURL: URL(string: "https://example.com/square.png")!
+    )
+
+    func attribution() async throws -> WeatherKitAttribution {
+        if case .failure(let error) = outcome { throw error }
+        return Self.stubAttribution
+    }
+
     func forecast(at coord: Coordinate, horizon: ForecastHorizon, units: UnitSystem) async throws -> ProviderForecast {
         receivedHorizon = horizon
         switch outcome {
@@ -98,6 +111,27 @@ struct WeatherKitTests {
         #expect(result.perProvider[.weatherKit] == nil)
         #expect(result.failures[.weatherKit] != nil)
         #expect(result.perProvider[.openMeteo] != nil)
+    }
+
+    @Test func attributionIsReturnedWhenWeatherKitIsConfigured() async throws {
+        let client = WeatherClient(
+            config: WeatherClientConfig(),
+            http: MockHTTPClient(),
+            weatherKit: MockWeatherKitClient()
+        )
+
+        let attribution = try await client.weatherKitAttribution()
+
+        #expect(attribution?.serviceName == "Apple Weather")
+        #expect(attribution?.legalPageURL.absoluteString.contains("apple.com") == true)
+    }
+
+    @Test func attributionIsNilWhenWeatherKitIsNotConfigured() async throws {
+        let client = WeatherClient(config: WeatherClientConfig(), http: MockHTTPClient())
+
+        let attribution = try await client.weatherKitAttribution()
+
+        #expect(attribution == nil)
     }
 
     @Test func weatherKitIsSkippedWhenNotConfigured() async {

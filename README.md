@@ -54,6 +54,11 @@ case .none:   // <2 providers available
 for alert in forecast.alerts where alert.severity == .severe {
     // surface in UI
 }
+
+// WeatherKit attribution — required wherever you display its data
+if let attribution = try? await client.weatherKitAttribution() {
+    // attribution.combinedMarkLightURL / .legalPageURL → render logo + legal link
+}
 ```
 
 ## Architecture

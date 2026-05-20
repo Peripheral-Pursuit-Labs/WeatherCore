@@ -62,6 +62,36 @@ public struct WeatherKitExtras: Sendable, Codable {
     }
 }
 
+/// Apple Weather attribution. WeatherKit's terms require displaying the Apple Weather
+/// logo and a link to the legal/data-source page anywhere its data is shown. Surfaced
+/// as a plain value type so consumers don't need to import WeatherKit themselves.
+public struct WeatherKitAttribution: Sendable, Codable, Hashable {
+    /// Display name, e.g. "Apple Weather".
+    public let serviceName: String
+    /// Link to the legal attribution / data-source page to present to users.
+    public let legalPageURL: URL
+    /// Apple Weather combined mark (logo) for light backgrounds.
+    public let combinedMarkLightURL: URL
+    /// Apple Weather combined mark (logo) for dark backgrounds.
+    public let combinedMarkDarkURL: URL
+    /// Square Apple Weather mark, for compact placements.
+    public let squareMarkURL: URL
+
+    public init(
+        serviceName: String,
+        legalPageURL: URL,
+        combinedMarkLightURL: URL,
+        combinedMarkDarkURL: URL,
+        squareMarkURL: URL
+    ) {
+        self.serviceName = serviceName
+        self.legalPageURL = legalPageURL
+        self.combinedMarkLightURL = combinedMarkLightURL
+        self.combinedMarkDarkURL = combinedMarkDarkURL
+        self.squareMarkURL = squareMarkURL
+    }
+}
+
 public struct RainViewerExtras: Sendable, Codable {
     public let radarFrames: [RadarFrame]
     public let nowcastFrames: [RadarFrame]

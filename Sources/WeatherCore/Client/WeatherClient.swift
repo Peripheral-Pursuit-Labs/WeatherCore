@@ -121,6 +121,14 @@ public struct WeatherClient: Sendable {
         )
     }
 
+    /// Apple Weather attribution for WeatherKit data — logo URLs plus the legal page link
+    /// that consumers must display wherever WeatherKit data appears. Returns `nil` when
+    /// WeatherKit isn't configured; throws if the attribution fetch itself fails.
+    public func weatherKitAttribution() async throws -> WeatherKitAttribution? {
+        guard let weatherKit else { return nil }
+        return try await weatherKit.attribution()
+    }
+
     // MARK: - Individual fetch helpers, each returning an enum so we can capture errors per-provider
 
     private enum FetchResult: Sendable {
