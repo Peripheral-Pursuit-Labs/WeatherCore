@@ -1,0 +1,128 @@
+import Testing
+import Foundation
+@testable import WeatherCore
+
+@Suite("Provider clients decode wire formats correctly")
+struct ProviderClientTests {
+
+    @Test func pirateWeatherDecodesBasicResponse() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("pirateweather.net", with: .init(data: Fixtures.data(Fixtures.pirateWeatherSample)))
+
+        let client = PirateWeatherClient(apiKey: "test-key", http: mock)
+        let forecast = try await client.forecast(at: Coordinate(latitude: 28.8, longitude: -81.27))
+
+        #expect(forecast.provider == .pirateWeather)
+        #expect(forecast.current?.temperature?.value == 82.5)
+        #expect(forecast.minutely?.points.count == 4)
+        #expect(forecast.minutely?.summary == "Light rain starting in 12 min.")
+        if case .pirateWeather(let extras) = forecast.extras {
+            #expect(extras.cape == 1200)
+            #expect(extras.processingTimeMs == 142.3)
+        } else {
+            Issue.record("Expected pirateWeather extras")
+        }
+    }
+
+    @Test func pirateWeatherThrowsOnMissingKey() async throws {
+        let client = PirateWeatherClient(apiKey: "", http: MockHTTPClient())
+        await #expect(throws: ProviderError.self) {
+            _ = try await client.forecast(at: Coordinate(latitude: 28.8, longitude: -81.27))
+        }
+    }
+
+    @Test func pirateWeatherSurfacesHTTPError() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("pirateweather.net", with: .init(data: Data("rate limited".utf8), statusCode: 429))
+        let client = PirateWeatherClient(apiKey: "test", http: mock)
+
+        await #expect(throws: ProviderError.self) {
+            _ = try await client.forecast(at: Coordinate(latitude: 28.8, longitude: -81.27))
+        }
+    }
+
+    @Test func openMeteoDecodesMultiArrayResponse() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoSample)))
+
+        let client = OpenMeteoClient(http: mock)
+        let forecast = try await client.forecast(at: Coordinate(latitude: 28.8, longitude: -81.27))
+
+        #expect(forecast.provider == .openMeteo)
+        #expect(forecast.hourly?.snapshots.count == 2)
+        #expect(forecast.minutely?.points.count == 4)
+        #expect(forecast.daily?.days.count == 1)
+        // Probability normalization 0-100 to 0-1
+        #expect(forecast.hourly?.snapshots.first?.precipitationProbability == 0.45)
+    }
+
+    @Test func openMeteoRequestIncludesAllConfiguredModels() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoSample)))
+
+        let client = OpenMeteoClient(http: mock)
+        _ = try await client.forecast(
+            at: Coordinate(latitude: 28.8, longitude: -81.27),
+            models: [.gfsHrrr, .ecmwfIfs04]
+        )
+
+        let request = mock.requests.first
+        #expect(request?.url?.absoluteString.contains("gfs_hrrr") == true)
+        #expect(request?.url?.absoluteString.contains("ecmwf_ifs04") == true)
+    }
+
+    @Test func rainViewerDecodesPastAndNowcastFrames() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("rainviewer.com", with: .init(data: Fixtures.data(Fixtures.rainViewerSample)))
+
+        let client = RainViewerClient(http: mock)
+        let forecast = try await client.frames(near: Coordinate(latitude: 28.8, longitude: -81.27))
+
+        if case .rainViewer(let extras) = forecast.extras {
+            #expect(extras.radarFrames.count == 2)
+            #expect(extras.nowcastFrames.count == 2)
+            #expect(extras.host == "https://tilecache.rainviewer.com")
+            #expect(extras.nowcastFrames.allSatisfy(\.isNowcast))
+        } else {
+            Issue.record("Expected rainViewer extras")
+        }
+    }
+
+    @Test func rainViewerTileURLConstructionMatchesAPISpec() {
+        let url = RainViewerClient.tileURL(
+            host: "https://tilecache.rainviewer.com",
+            framePath: "/v2/radar/1716124800",
+            zoom: 8,
+            x: 70,
+            y: 105
+        )
+        #expect(url?.absoluteString == "https://tilecache.rainviewer.com/v2/radar/1716124800/256/8/70/105/2/1_0.png")
+    }
+
+    @Test func nwsDecodesAlertsAndIncludesUserAgent() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("weather.gov", with: .init(data: Fixtures.data(Fixtures.nwsAlertsSample)))
+
+        let client = NWSClient(userAgent: "TestApp/1.0 (ben@example.com)", http: mock)
+        let forecast = try await client.alerts(at: Coordinate(latitude: 28.8, longitude: -81.27))
+
+        if case .nws(let extras) = forecast.extras {
+            #expect(extras.alerts.count == 1)
+            #expect(extras.alerts.first?.event == "Severe Thunderstorm Warning")
+            #expect(extras.alerts.first?.severity == .severe)
+            #expect(extras.alerts.first?.urgency == .immediate)
+        } else {
+            Issue.record("Expected nws extras")
+        }
+
+        let request = mock.requests.first
+        #expect(request?.value(forHTTPHeaderField: "User-Agent") == "TestApp/1.0 (ben@example.com)")
+    }
+
+    @Test func nwsThrowsWithoutUserAgent() async throws {
+        let client = NWSClient(userAgent: "", http: MockHTTPClient())
+        await #expect(throws: ProviderError.self) {
+            _ = try await client.alerts(at: Coordinate(latitude: 28.8, longitude: -81.27))
+        }
+    }
+}
