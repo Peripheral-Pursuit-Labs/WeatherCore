@@ -28,6 +28,7 @@ public enum ForecastHorizon: Sendable {
 public enum ProviderID: String, Sendable, Codable, CaseIterable, Hashable {
     case pirateWeather
     case openMeteo
+    case weatherKit
     case rainViewer
     case nws
 }

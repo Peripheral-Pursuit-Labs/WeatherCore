@@ -5,6 +5,7 @@ import Foundation
 public enum ProviderExtras: Sendable {
     case pirateWeather(PirateWeatherExtras)
     case openMeteo(OpenMeteoExtras)
+    case weatherKit(WeatherKitExtras)
     case rainViewer(RainViewerExtras)
     case nws(NWSExtras)
     case none
@@ -39,6 +40,25 @@ public struct OpenMeteoExtras: Sendable, Codable {
         self.perModelPrecipitation = perModelPrecipitation
         self.hourlyTimes = hourlyTimes
         self.modelsRequested = modelsRequested
+    }
+}
+
+public struct WeatherKitExtras: Sendable, Codable {
+    /// SF Symbol name for the current condition (e.g. "cloud.rain").
+    public let symbolName: String?
+    /// Human-readable current condition (e.g. "Mostly Cloudy").
+    public let conditionDescription: String?
+    /// When Apple considers this data set stale; useful for cache/refresh decisions.
+    public let metadataExpirationDate: Date?
+
+    public init(
+        symbolName: String? = nil,
+        conditionDescription: String? = nil,
+        metadataExpirationDate: Date? = nil
+    ) {
+        self.symbolName = symbolName
+        self.conditionDescription = conditionDescription
+        self.metadataExpirationDate = metadataExpirationDate
     }
 }
 
