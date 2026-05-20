@@ -8,6 +8,8 @@ import Foundation
 /// the data sets it needs (WeatherKit bills per data set requested).
 public protocol WeatherKitForecasting: Sendable {
     func forecast(at coord: Coordinate, horizon: ForecastHorizon, units: UnitSystem) async throws -> ProviderForecast
+    /// Apple Weather attribution (logo URLs + legal link), required for display.
+    func attribution() async throws -> WeatherKitAttribution
 }
 
 #if canImport(WeatherKit)
@@ -47,6 +49,22 @@ public struct WeatherKitClient: WeatherKitForecasting {
             }
         } catch {
             log.error("WeatherKit fetch failed: \(error.localizedDescription, privacy: .public)")
+            throw ProviderError.underlying(message: error.localizedDescription)
+        }
+    }
+
+    public func attribution() async throws -> WeatherKitAttribution {
+        do {
+            let a = try await service.attribution
+            return WeatherKitAttribution(
+                serviceName: a.serviceName,
+                legalPageURL: a.legalPageURL,
+                combinedMarkLightURL: a.combinedMarkLightURL,
+                combinedMarkDarkURL: a.combinedMarkDarkURL,
+                squareMarkURL: a.squareMarkURL
+            )
+        } catch {
+            WeatherLog.weatherKit.error("WeatherKit attribution fetch failed: \(error.localizedDescription, privacy: .public)")
             throw ProviderError.underlying(message: error.localizedDescription)
         }
     }
