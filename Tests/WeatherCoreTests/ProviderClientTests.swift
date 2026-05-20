@@ -82,7 +82,7 @@ struct ProviderClientTests {
             #expect(extras.radarFrames.count == 2)
             #expect(extras.nowcastFrames.count == 2)
             #expect(extras.host == "https://tilecache.rainviewer.com")
-            #expect(extras.nowcastFrames.allSatisfy(\.isNowcast))
+            #expect(extras.nowcastFrames.allSatisfy { $0.isNowcast })
         } else {
             Issue.record("Expected rainViewer extras")
         }

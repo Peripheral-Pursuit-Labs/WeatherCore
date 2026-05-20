@@ -34,13 +34,16 @@ public final class MockHTTPClient: HTTPClient, @unchecked Sendable {
         }, with: stub)
     }
 
-    public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        lock.lock()
+    private func record(_ request: URLRequest) -> Stub? {
+        lock.lock(); defer { lock.unlock() }
         _requests.append(request)
-        let match = stubs.first(where: { $0.matcher(request) })
-        lock.unlock()
+        return stubs.first(where: { $0.matcher(request) })?.stub
+    }
 
-        guard let stub = match?.stub else {
+    public func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let match = record(request)
+
+        guard let stub = match else {
             throw ProviderError.underlying(message: "No stub for \(request.url?.absoluteString ?? "nil")")
         }
         let response = HTTPURLResponse(
