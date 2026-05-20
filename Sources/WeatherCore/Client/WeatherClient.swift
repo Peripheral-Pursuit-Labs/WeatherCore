@@ -5,14 +5,20 @@ public struct WeatherClient: Sendable {
     public let config: WeatherClientConfig
     public let pirateWeather: PirateWeatherClient?
     public let openMeteo: OpenMeteoClient
+    public let weatherKit: (any WeatherKitForecasting)?
     public let rainViewer: RainViewerClient
     public let nws: NWSClient?
 
     private let analyzer = DisagreementAnalyzer()
 
+    /// Providers that produce comparable point forecasts and so feed disagreement analysis.
+    /// RainViewer (radar) and NWS (alerts) carry no probability/intensity values to compare.
+    private static let analyzableProviders: Set<ProviderID> = [.pirateWeather, .openMeteo, .weatherKit]
+
     public init(
         config: WeatherClientConfig,
-        http: any HTTPClient = URLSessionHTTPClient()
+        http: any HTTPClient = URLSessionHTTPClient(),
+        weatherKit: (any WeatherKitForecasting)? = nil
     ) {
         self.config = config
         let cache = ResponseCache(defaultTTL: config.cacheTTL)
@@ -31,6 +37,20 @@ public struct WeatherClient: Sendable {
         } else {
             self.nws = nil
         }
+
+        // An injected client wins (used by tests); otherwise stand up the native
+        // client when the caller opted in via config.
+        if let weatherKit {
+            self.weatherKit = weatherKit
+        } else if config.enableWeatherKit {
+            #if canImport(WeatherKit)
+            self.weatherKit = WeatherKitClient()
+            #else
+            self.weatherKit = nil
+            #endif
+        } else {
+            self.weatherKit = nil
+        }
     }
 
     /// The headline call. Fans out to every configured provider concurrently,
@@ -48,10 +68,11 @@ public struct WeatherClient: Sendable {
 
         async let pirateResult = fetchPirate(at: coord, enabled: providers.contains(.pirateWeather))
         async let openMeteoResult = fetchOpenMeteo(at: coord, enabled: providers.contains(.openMeteo), models: openMeteoModels)
+        async let weatherKitResult = fetchWeatherKit(at: coord, horizon: horizon, enabled: providers.contains(.weatherKit))
         async let rainViewerResult = fetchRainViewer(at: coord, enabled: providers.contains(.rainViewer))
         async let nwsResult = fetchNWS(at: coord, enabled: providers.contains(.nws))
 
-        let results = await (pirateResult, openMeteoResult, rainViewerResult, nwsResult)
+        let results = await (pirateResult, openMeteoResult, weatherKitResult, rainViewerResult, nwsResult)
 
         var perProvider: [ProviderID: ProviderForecast] = [:]
         var failures: [ProviderID: ProviderError] = [:]
@@ -60,8 +81,9 @@ public struct WeatherClient: Sendable {
         for (id, result) in [
             (ProviderID.pirateWeather, results.0),
             (ProviderID.openMeteo, results.1),
-            (ProviderID.rainViewer, results.2),
-            (ProviderID.nws, results.3)
+            (ProviderID.weatherKit, results.2),
+            (ProviderID.rainViewer, results.3),
+            (ProviderID.nws, results.4)
         ] {
             switch result {
             case .success(let forecast):
@@ -79,7 +101,7 @@ public struct WeatherClient: Sendable {
 
         // RainViewer doesn't contribute to disagreement analysis (no forecast values).
         // Same for NWS (alerts only). Filter them out.
-        let analyzable = perProvider.filter { $0.key == .pirateWeather || $0.key == .openMeteo }
+        let analyzable = perProvider.filter { Self.analyzableProviders.contains($0.key) }
         let disagreement = analyzer.analyze(
             forecasts: analyzable,
             horizon: horizon,
@@ -122,6 +144,17 @@ public struct WeatherClient: Sendable {
         guard enabled else { return .skipped }
         do {
             return .success(try await openMeteo.forecast(at: coord, units: config.defaultUnits, models: models))
+        } catch let error as ProviderError {
+            return .failure(error)
+        } catch {
+            return .failure(.underlying(message: error.localizedDescription))
+        }
+    }
+
+    private func fetchWeatherKit(at coord: Coordinate, horizon: ForecastHorizon, enabled: Bool) async -> FetchResult {
+        guard enabled, let client = weatherKit else { return .skipped }
+        do {
+            return .success(try await client.forecast(at: coord, horizon: horizon, units: config.defaultUnits))
         } catch let error as ProviderError {
             return .failure(error)
         } catch {

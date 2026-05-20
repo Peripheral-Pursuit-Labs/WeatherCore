@@ -9,6 +9,7 @@ public enum WeatherLog {
     public static let client          = Logger(subsystem: subsystem, category: "client")
     public static let pirate          = Logger(subsystem: subsystem, category: "provider.pirate")
     public static let openMeteo       = Logger(subsystem: subsystem, category: "provider.openmeteo")
+    public static let weatherKit      = Logger(subsystem: subsystem, category: "provider.weatherkit")
     public static let rainViewer      = Logger(subsystem: subsystem, category: "provider.rainviewer")
     public static let nws             = Logger(subsystem: subsystem, category: "provider.nws")
     public static let networking      = Logger(subsystem: subsystem, category: "networking")
@@ -19,6 +20,7 @@ public enum WeatherLog {
         switch id {
         case .pirateWeather: pirate
         case .openMeteo: openMeteo
+        case .weatherKit: weatherKit
         case .rainViewer: rainViewer
         case .nws: nws
         }
