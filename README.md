@@ -2,6 +2,26 @@
 
 A UI-free Swift package for acquiring, normalizing, and analyzing weather data from multiple providers. Built for iOS 26+ with Swift 6 strict concurrency.
 
+## Installation
+
+Add the package in Xcode via **File → Add Package Dependencies…** and paste the repository URL, or add it to your own `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/<org>/WeatherCore.git", from: "0.1.0")
+],
+targets: [
+    .target(name: "YourApp", dependencies: ["WeatherCore"])
+]
+```
+
+### Requirements
+
+- **iOS 26+ / macOS 15+.** Your app's deployment target must meet or exceed these, or package resolution will fail.
+- **Swift 6** toolchain (the package builds in Swift 6 language mode).
+- **WeatherKit entitlement (only if you set `enableWeatherKit: true`).** WeatherKit is Apple's native framework: the host app must add the *WeatherKit* capability under Signing & Capabilities, backed by an App ID with WeatherKit enabled in the Apple Developer portal. Without it, WeatherKit forecasts and `weatherKitAttribution()` throw at runtime. No entitlement is needed for the other providers.
+- **API keys / identifiers are caller-supplied** via `WeatherClientConfig` (Pirate Weather key, NWS User-Agent). The package never stores them.
+
 ## Design
 
 Five providers, one unified call:
