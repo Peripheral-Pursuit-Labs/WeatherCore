@@ -61,6 +61,20 @@ if let attribution = try? await client.weatherKitAttribution() {
 }
 ```
 
+## Resilience
+
+Retry and circuit-breaking are opt-in via config and wrap the shared transport, so every provider benefits:
+
+```swift
+let client = WeatherClient(config: .init(
+    pirateWeatherAPIKey: "your-key",
+    retryPolicy: .default,          // up to 2 retries, exponential backoff + jitter
+    circuitBreaker: .default        // trip after 5 consecutive failures per host
+))
+```
+
+Retries fire on transient failures only (network errors, HTTP 408/429/5xx); 4xx is returned immediately. The circuit breaker is per-host: once a provider trips it, calls to that host fail fast until the reset timeout elapses, then a single half-open trial decides whether to close it. Defaults are `.none` / `.disabled`, leaving behavior unchanged unless you opt in.
+
 ## Architecture
 
 ```
@@ -68,7 +82,7 @@ WeatherCore/
 ├── Models/         # Sendable value types: Coordinate, WeatherSnapshot, etc.
 ├── Client/         # WeatherClient — fans out to providers concurrently
 ├── Providers/      # PirateWeather, OpenMeteo, WeatherKit, RainViewer, NWS clients
-├── Networking/     # HTTPClient protocol + URLSession impl, ResponseCache actor
+├── Networking/     # HTTPClient protocol + URLSession impl, ResilientHTTPClient, ResponseCache actor
 ├── Analysis/       # DisagreementAnalyzer
 └── Logging/        # OSLog facades, one Logger per component
 ```

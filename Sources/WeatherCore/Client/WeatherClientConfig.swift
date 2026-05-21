@@ -9,6 +9,11 @@ public struct WeatherClientConfig: Sendable {
     public let defaultUnits: UnitSystem
     public let cacheTTL: TimeInterval
     public let requestTimeout: TimeInterval
+    /// Retry behavior for transient network/HTTP failures. Defaults to `.none`.
+    public let retryPolicy: RetryPolicy
+    /// Per-host circuit breaker that fails fast for repeatedly-failing providers.
+    /// Defaults to `.disabled`.
+    public let circuitBreaker: CircuitBreakerPolicy
 
     public init(
         pirateWeatherAPIKey: String? = nil,
@@ -16,7 +21,9 @@ public struct WeatherClientConfig: Sendable {
         enableWeatherKit: Bool = false,
         defaultUnits: UnitSystem = .imperial,
         cacheTTL: TimeInterval = 300,
-        requestTimeout: TimeInterval = 15
+        requestTimeout: TimeInterval = 15,
+        retryPolicy: RetryPolicy = .none,
+        circuitBreaker: CircuitBreakerPolicy = .disabled
     ) {
         self.pirateWeatherAPIKey = pirateWeatherAPIKey
         self.nwsUserAgent = nwsUserAgent
@@ -24,5 +31,7 @@ public struct WeatherClientConfig: Sendable {
         self.defaultUnits = defaultUnits
         self.cacheTTL = cacheTTL
         self.requestTimeout = requestTimeout
+        self.retryPolicy = retryPolicy
+        self.circuitBreaker = circuitBreaker
     }
 }

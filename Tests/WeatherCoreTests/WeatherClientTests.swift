@@ -69,6 +69,28 @@ struct WeatherClientTests {
         #expect(result.perProvider[.rainViewer] != nil)
     }
 
+    @Test func retryPolicyFromConfigRetriesTransientFailures() async {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("pirateweather.net", with: .init(data: Data("upstream error".utf8), statusCode: 503))
+        mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoSample)))
+
+        let config = WeatherClientConfig(
+            pirateWeatherAPIKey: "test-key",
+            retryPolicy: RetryPolicy(maxRetries: 2, baseDelay: 0.001, jitter: 0)
+        )
+        let client = WeatherClient(config: config, http: mock)
+
+        let result = await client.unifiedForecast(
+            at: Coordinate(latitude: 28.8, longitude: -81.27),
+            providers: [.pirateWeather, .openMeteo]
+        )
+
+        let pirateCalls = mock.requests.filter { $0.url?.host?.contains("pirateweather") == true }.count
+        #expect(pirateCalls == 3, "1 initial + 2 retries on 503")
+        #expect(result.failures[.pirateWeather] != nil, "still fails after exhausting retries")
+        #expect(result.perProvider[.openMeteo] != nil)
+    }
+
     @Test func unifiedForecastRespectsProviderFilter() async {
         let mock = MockHTTPClient()
         mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoSample)))

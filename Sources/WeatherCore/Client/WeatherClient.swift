@@ -23,6 +23,15 @@ public struct WeatherClient: Sendable {
         self.config = config
         let cache = ResponseCache(defaultTTL: config.cacheTTL)
 
+        // Wrap the transport with retry + circuit breaker. With the default `.none`/
+        // `.disabled` policies this is a transparent passthrough (single attempt,
+        // breaker never opens), so behavior is unchanged unless the caller opts in.
+        let http: any HTTPClient = ResilientHTTPClient(
+            wrapping: http,
+            retryPolicy: config.retryPolicy,
+            circuitBreaker: config.circuitBreaker
+        )
+
         if let key = config.pirateWeatherAPIKey, !key.isEmpty {
             self.pirateWeather = PirateWeatherClient(apiKey: key, http: http, cache: cache)
         } else {
