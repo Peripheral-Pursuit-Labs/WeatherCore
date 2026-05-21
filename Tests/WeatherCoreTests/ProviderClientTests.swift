@@ -56,6 +56,34 @@ struct ProviderClientTests {
         #expect(forecast.hourly?.snapshots.first?.precipitationProbability == 0.45)
     }
 
+    @Test func openMeteoDecodesMultiModelResponse() async throws {
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoMultiModelSample)))
+
+        let client = OpenMeteoClient(http: mock)
+        let forecast = try await client.forecast(
+            at: Coordinate(latitude: 28.8, longitude: -81.27),
+            models: [.gfsHrrr, .ecmwfIfs04]
+        )
+
+        // The first requested model (gfs_hrrr) drives the normalized forecast.
+        #expect(forecast.hourly?.snapshots.count == 2)
+        #expect(forecast.hourly?.snapshots.first?.precipitationProbability == 0.45)
+        #expect(forecast.minutely?.points.count == 4)
+        #expect(forecast.daily?.days.count == 1)
+
+        guard case .openMeteo(let extras) = forecast.extras else {
+            Issue.record("Expected openMeteo extras")
+            return
+        }
+        // Every model's hourly precipitation is exposed for intra-provider disagreement.
+        #expect(extras.perModelPrecipitation.count == 2)
+        #expect(extras.perModelPrecipitation["gfs_hrrr"]?.compactMap { $0 } == [0.1, 0.4])
+        #expect(extras.perModelPrecipitation["ecmwf_ifs04"]?.compactMap { $0 } == [0.0, 0.9])
+        #expect(extras.hourlyTimes.count == 2)
+        #expect(extras.modelsRequested == ["gfs_hrrr", "ecmwf_ifs04"])
+    }
+
     @Test func openMeteoRequestIncludesAllConfiguredModels() async throws {
         let mock = MockHTTPClient()
         mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoSample)))

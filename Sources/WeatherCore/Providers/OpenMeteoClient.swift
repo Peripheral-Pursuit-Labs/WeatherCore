@@ -82,6 +82,20 @@ public struct OpenMeteoClient: Sendable {
             await cache?.set(cacheKey, data: data)
         }
 
+        // Open-Meteo changes its response shape when more than one model is requested:
+        // every variable is suffixed with the model id and the unified arrays disappear.
+        // Decode that variant separately so we can populate per-model precipitation.
+        if models.count > 1 {
+            do {
+                return try OpenMeteoMultiModel.decode(data, units: units, models: models)
+            } catch let error as ProviderError {
+                throw error
+            } catch {
+                log.error("Multi-model decode failed: \(error.localizedDescription, privacy: .public)")
+                throw ProviderError.decoding(message: error.localizedDescription)
+            }
+        }
+
         let decoded: OpenMeteoResponse
         do {
             decoded = try JSONDecoder().decode(OpenMeteoResponse.self, from: data)
@@ -250,14 +264,154 @@ private struct OpenMeteoResponse: Decodable {
     }
 
     private func weatherCodeToType(_ code: Int?) -> PrecipitationType? {
-        guard let code else { return nil }
-        // WMO weather codes
-        switch code {
-        case 0...3: return PrecipitationType.none
-        case 51...67, 80...82: return .rain
-        case 71...77, 85...86: return .snow
-        case 95...99: return .rain  // thunderstorm → rain
-        default: return .unknown
+        openMeteoWeatherCodeToType(code)
+    }
+}
+
+/// Maps WMO weather codes to a precipitation type. Shared by the single- and
+/// multi-model decoding paths.
+private func openMeteoWeatherCodeToType(_ code: Int?) -> PrecipitationType? {
+    guard let code else { return nil }
+    switch code {
+    case 0...3: return PrecipitationType.none
+    case 51...67, 80...82: return .rain
+    case 71...77, 85...86: return .snow
+    case 95...99: return .rain  // thunderstorm → rain
+    default: return .unknown
+    }
+}
+
+// MARK: - Multi-model wire format
+
+/// Parses the multi-model Open-Meteo response, where each variable is suffixed with the
+/// model id (e.g. `precipitation_gfs_hrrr`). Builds a representative normalized forecast
+/// from the first requested model and exposes every model's hourly precipitation via
+/// `OpenMeteoExtras.perModelPrecipitation`. Uses JSONSerialization because the keys are
+/// dynamic (model ids aren't known at compile time).
+private enum OpenMeteoMultiModel {
+    static func decode(_ data: Data, units: UnitSystem, models: [OpenMeteoClient.Model]) throws -> ProviderForecast {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ProviderError.decoding(message: "Open-Meteo multi-model: root is not a JSON object")
         }
+
+        let tempUnit: UnitTemperature = units == .metric ? .celsius : .fahrenheit
+        let speedUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour
+        let precipUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour
+
+        let hourly = root["hourly"] as? [String: Any]
+        let current = root["current"] as? [String: Any]
+        let minutely = root["minutely_15"] as? [String: Any]
+        let daily = root["daily"] as? [String: Any]
+
+        let hourlyTimes = times(hourly?["time"])
+
+        // The first requested model drives the normalized forecast.
+        let primary = models.first ?? .best
+        let suffix = "_" + primary.apiValue
+
+        let hourlySnaps: [WeatherSnapshot] = hourlyTimes.indices.map { i in
+            WeatherSnapshot(
+                time: Date(timeIntervalSince1970: hourlyTimes[i]),
+                temperature: dbl(hourly, "temperature_2m" + suffix, i).map { Measurement(value: $0, unit: tempUnit) },
+                apparentTemperature: dbl(hourly, "apparent_temperature" + suffix, i).map { Measurement(value: $0, unit: tempUnit) },
+                humidity: dbl(hourly, "relative_humidity_2m" + suffix, i).map { $0 / 100 },
+                precipitationIntensity: dbl(hourly, "precipitation" + suffix, i).map { Measurement(value: $0, unit: precipUnit) },
+                precipitationProbability: dbl(hourly, "precipitation_probability" + suffix, i).map { $0 / 100 },
+                precipitationType: openMeteoWeatherCodeToType(int(hourly, "weathercode" + suffix, i)),
+                windSpeed: dbl(hourly, "windspeed_10m" + suffix, i).map { Measurement(value: $0, unit: speedUnit) },
+                windGust: dbl(hourly, "windgusts_10m" + suffix, i).map { Measurement(value: $0, unit: speedUnit) },
+                windDirection: dbl(hourly, "winddirection_10m" + suffix, i).map { Measurement(value: $0, unit: .degrees) },
+                cloudCover: dbl(hourly, "cloudcover" + suffix, i).map { $0 / 100 },
+                pressure: dbl(hourly, "pressure_msl" + suffix, i).map { Measurement(value: $0, unit: .hectopascals) },
+                uvIndex: dbl(hourly, "uv_index" + suffix, i),
+                visibility: dbl(hourly, "visibility" + suffix, i).map { Measurement(value: $0, unit: .meters) }
+            )
+        }
+
+        let currentSnap: WeatherSnapshot? = current.map { c in
+            WeatherSnapshot(
+                time: Date(timeIntervalSince1970: (c["time"] as? Double) ?? 0),
+                temperature: (c["temperature_2m" + suffix] as? Double).map { Measurement(value: $0, unit: tempUnit) },
+                apparentTemperature: (c["apparent_temperature" + suffix] as? Double).map { Measurement(value: $0, unit: tempUnit) },
+                humidity: (c["relative_humidity_2m" + suffix] as? Double).map { $0 / 100 },
+                precipitationIntensity: (c["precipitation" + suffix] as? Double).map { Measurement(value: $0, unit: precipUnit) },
+                precipitationProbability: nil,
+                precipitationType: openMeteoWeatherCodeToType(c["weathercode" + suffix] as? Int),
+                windSpeed: (c["windspeed_10m" + suffix] as? Double).map { Measurement(value: $0, unit: speedUnit) },
+                windGust: (c["windgusts_10m" + suffix] as? Double).map { Measurement(value: $0, unit: speedUnit) },
+                windDirection: (c["winddirection_10m" + suffix] as? Double).map { Measurement(value: $0, unit: .degrees) },
+                cloudCover: (c["cloudcover" + suffix] as? Double).map { $0 / 100 },
+                pressure: (c["pressure_msl" + suffix] as? Double).map { Measurement(value: $0, unit: .hectopascals) },
+                uvIndex: nil,
+                visibility: nil
+            )
+        }
+
+        let minutelyTimes = times(minutely?["time"])
+        let minutelyPoints: [MinutelyPoint] = minutelyTimes.indices.map { i in
+            MinutelyPoint(
+                time: Date(timeIntervalSince1970: minutelyTimes[i]),
+                intensity: dbl(minutely, "precipitation" + suffix, i).map { Measurement(value: $0, unit: precipUnit) },
+                probability: dbl(minutely, "precipitation_probability" + suffix, i).map { $0 / 100 }
+            )
+        }
+
+        let dailyTimes = times(daily?["time"])
+        let dailySnaps: [DailySnapshot] = dailyTimes.indices.map { i in
+            DailySnapshot(
+                date: Date(timeIntervalSince1970: dailyTimes[i]),
+                high: dbl(daily, "temperature_2m_max" + suffix, i).map { Measurement(value: $0, unit: tempUnit) },
+                low: dbl(daily, "temperature_2m_min" + suffix, i).map { Measurement(value: $0, unit: tempUnit) },
+                precipitationProbability: dbl(daily, "precipitation_probability_max" + suffix, i).map { $0 / 100 },
+                precipitationAccumulation: dbl(daily, "precipitation_sum" + suffix, i).map { Measurement(value: $0, unit: .millimeters) },
+                precipitationType: openMeteoWeatherCodeToType(int(daily, "weathercode" + suffix, i)),
+                sunrise: dbl(daily, "sunrise" + suffix, i).map(Date.init(timeIntervalSince1970:)),
+                sunset: dbl(daily, "sunset" + suffix, i).map(Date.init(timeIntervalSince1970:)),
+                summary: nil
+            )
+        }
+
+        // Every model's hourly precipitation — the basis for intra-provider disagreement.
+        var perModel: [String: [Double?]] = [:]
+        for model in models {
+            perModel[model.rawValue] = doubles(hourly, "precipitation_" + model.apiValue)
+        }
+
+        let extras = OpenMeteoExtras(
+            perModelPrecipitation: perModel,
+            hourlyTimes: hourlyTimes.map(Date.init(timeIntervalSince1970:)),
+            modelsRequested: models.map(\.rawValue)
+        )
+
+        return ProviderForecast(
+            provider: .openMeteo,
+            fetchedAt: Date(),
+            current: currentSnap,
+            minutely: minutelyPoints.isEmpty ? nil : MinutelyForecast(points: minutelyPoints),
+            hourly: HourlyForecast(snapshots: hourlySnaps),
+            daily: DailyForecast(days: dailySnaps),
+            extras: .openMeteo(extras)
+        )
+    }
+
+    // MARK: Dynamic-key extraction helpers
+
+    private static func times(_ any: Any?) -> [TimeInterval] {
+        (any as? [Any])?.compactMap { $0 as? Double } ?? []
+    }
+
+    /// Full array of optional doubles for a key (NSNull → nil), preserving length/positions.
+    private static func doubles(_ dict: [String: Any]?, _ key: String) -> [Double?] {
+        (dict?[key] as? [Any])?.map { $0 as? Double } ?? []
+    }
+
+    private static func dbl(_ dict: [String: Any]?, _ key: String, _ i: Int) -> Double? {
+        guard let array = dict?[key] as? [Any], array.indices.contains(i) else { return nil }
+        return array[i] as? Double
+    }
+
+    private static func int(_ dict: [String: Any]?, _ key: String, _ i: Int) -> Int? {
+        guard let array = dict?[key] as? [Any], array.indices.contains(i) else { return nil }
+        return array[i] as? Int
     }
 }
