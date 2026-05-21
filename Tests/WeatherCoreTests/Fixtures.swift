@@ -121,6 +121,56 @@ enum Fixtures {
     }
     """
 
+    /// Multi-model response: every variable suffixed with the model id, no unified arrays.
+    static let openMeteoMultiModelSample: String = """
+    {
+      "latitude": 28.8,
+      "longitude": -81.27,
+      "current": {
+        "time": 1716124800,
+        "temperature_2m_gfs_hrrr": 82.0,
+        "temperature_2m_ecmwf_ifs04": 81.0,
+        "precipitation_gfs_hrrr": 0.0,
+        "precipitation_ecmwf_ifs04": 0.1,
+        "weathercode_gfs_hrrr": 2,
+        "weathercode_ecmwf_ifs04": 3
+      },
+      "hourly": {
+        "time": [1716127200, 1716130800],
+        "temperature_2m_gfs_hrrr": [83.5, 84.8],
+        "temperature_2m_ecmwf_ifs04": [82.0, 83.0],
+        "precipitation_gfs_hrrr": [0.1, 0.4],
+        "precipitation_ecmwf_ifs04": [0.0, 0.9],
+        "precipitation_probability_gfs_hrrr": [45, 60],
+        "precipitation_probability_ecmwf_ifs04": [20, 80],
+        "weathercode_gfs_hrrr": [61, 63],
+        "weathercode_ecmwf_ifs04": [2, 65]
+      },
+      "minutely_15": {
+        "time": [1716124800, 1716125700, 1716126600, 1716127500],
+        "precipitation_gfs_hrrr": [0.0, 0.05, 0.2, 0.4],
+        "precipitation_ecmwf_ifs04": [0.0, 0.0, 0.1, 0.3],
+        "precipitation_probability_gfs_hrrr": [10, 30, 55, 75],
+        "precipitation_probability_ecmwf_ifs04": [5, 10, 40, 70]
+      },
+      "daily": {
+        "time": [1716094800],
+        "temperature_2m_max_gfs_hrrr": [88.0],
+        "temperature_2m_max_ecmwf_ifs04": [86.0],
+        "temperature_2m_min_gfs_hrrr": [71.0],
+        "temperature_2m_min_ecmwf_ifs04": [70.0],
+        "precipitation_sum_gfs_hrrr": [4.5],
+        "precipitation_sum_ecmwf_ifs04": [6.0],
+        "precipitation_probability_max_gfs_hrrr": [65],
+        "precipitation_probability_max_ecmwf_ifs04": [85],
+        "sunrise_gfs_hrrr": [1716115200],
+        "sunset_gfs_hrrr": [1716165600],
+        "weathercode_gfs_hrrr": [63],
+        "weathercode_ecmwf_ifs04": [65]
+      }
+    }
+    """
+
     static let rainViewerSample: String = """
     {
       "version": "2.0",
