@@ -95,7 +95,7 @@ struct DisagreementAnalyzerTests {
         let snapshots = (0..<24).map { i in
             WeatherSnapshot(
                 time: referenceTime.addingTimeInterval(TimeInterval(i * 3600)),
-                precipitationIntensity: Measurement(value: hourlyIntensity, unit: UnitSpeed.metersPerSecond),
+                precipitationIntensity: Measurement(value: hourlyIntensity, unit: UnitPrecipitationIntensity.millimetersPerHour),
                 precipitationProbability: hourlyProb
             )
         }
@@ -119,7 +119,7 @@ struct DisagreementAnalyzerTests {
         let points = (0..<60).map { minute in
             MinutelyPoint(
                 time: reference.addingTimeInterval(TimeInterval(minute * 60)),
-                intensity: Measurement(value: intensity, unit: UnitSpeed.metersPerSecond),
+                intensity: Measurement(value: intensity, unit: UnitPrecipitationIntensity.millimetersPerHour),
                 probability: probability
             )
         }

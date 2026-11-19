@@ -6,7 +6,7 @@ public struct WeatherSnapshot: Sendable, Codable {
     public let temperature: Measurement<UnitTemperature>?
     public let apparentTemperature: Measurement<UnitTemperature>?
     public let humidity: Double?            // 0...1
-    public let precipitationIntensity: Measurement<UnitSpeed>?  // mm/hr modeled as length/time
+    public let precipitationIntensity: Measurement<UnitPrecipitationIntensity>?
     public let precipitationProbability: Double?  // 0...1
     public let precipitationType: PrecipitationType?
     public let windSpeed: Measurement<UnitSpeed>?
@@ -16,13 +16,15 @@ public struct WeatherSnapshot: Sendable, Codable {
     public let pressure: Measurement<UnitPressure>?
     public let uvIndex: Double?
     public let visibility: Measurement<UnitLength>?
+    /// Convective available potential energy in joules per kilogram.
+    public let cape: Double?
 
     public init(
         time: Date,
         temperature: Measurement<UnitTemperature>? = nil,
         apparentTemperature: Measurement<UnitTemperature>? = nil,
         humidity: Double? = nil,
-        precipitationIntensity: Measurement<UnitSpeed>? = nil,
+        precipitationIntensity: Measurement<UnitPrecipitationIntensity>? = nil,
         precipitationProbability: Double? = nil,
         precipitationType: PrecipitationType? = nil,
         windSpeed: Measurement<UnitSpeed>? = nil,
@@ -31,7 +33,8 @@ public struct WeatherSnapshot: Sendable, Codable {
         cloudCover: Double? = nil,
         pressure: Measurement<UnitPressure>? = nil,
         uvIndex: Double? = nil,
-        visibility: Measurement<UnitLength>? = nil
+        visibility: Measurement<UnitLength>? = nil,
+        cape: Double? = nil
     ) {
         self.time = time
         self.temperature = temperature
@@ -47,16 +50,17 @@ public struct WeatherSnapshot: Sendable, Codable {
         self.pressure = pressure
         self.uvIndex = uvIndex
         self.visibility = visibility
+        self.cape = cape
     }
 }
 
 /// Point-in-time precipitation for the 0-60 minute window.
 public struct MinutelyPoint: Sendable, Codable {
     public let time: Date
-    public let intensity: Measurement<UnitSpeed>?   // mm/hr
+    public let intensity: Measurement<UnitPrecipitationIntensity>?
     public let probability: Double?
 
-    public init(time: Date, intensity: Measurement<UnitSpeed>?, probability: Double?) {
+    public init(time: Date, intensity: Measurement<UnitPrecipitationIntensity>?, probability: Double?) {
         self.time = time
         self.intensity = intensity
         self.probability = probability

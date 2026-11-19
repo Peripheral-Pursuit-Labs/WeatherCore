@@ -11,8 +11,7 @@ public struct WeatherClient: Sendable {
 
     private let analyzer = DisagreementAnalyzer()
 
-    /// Providers that produce comparable point forecasts and so feed disagreement analysis.
-    /// RainViewer (radar) and NWS (alerts) carry no probability/intensity values to compare.
+    /// Providers that feed disagreement analysis. RainViewer and NWS aren't point forecasts.
     private static let analyzableProviders: Set<ProviderID> = [.pirateWeather, .openMeteo, .weatherKit]
 
     public init(
@@ -40,6 +39,7 @@ public struct WeatherClient: Sendable {
 
         self.openMeteo = OpenMeteoClient(http: http, cache: cache)
         self.rainViewer = RainViewerClient(http: http, cache: cache)
+
 
         if let ua = config.nwsUserAgent, !ua.isEmpty {
             self.nws = NWSClient(userAgent: ua, http: http, cache: cache)

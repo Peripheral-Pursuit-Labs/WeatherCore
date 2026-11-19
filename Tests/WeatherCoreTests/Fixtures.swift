@@ -101,7 +101,8 @@ enum Fixtures {
         "windspeed_10m": [9, 11],
         "windgusts_10m": [13, 16],
         "winddirection_10m": [180, 190],
-        "pressure_msl": [1014, 1013]
+        "pressure_msl": [1014, 1013],
+        "cape": [1400, 2200]
       },
       "minutely_15": {
         "time": [1716124800, 1716125700, 1716126600, 1716127500],
@@ -144,7 +145,9 @@ enum Fixtures {
         "precipitation_probability_gfs_hrrr": [45, 60],
         "precipitation_probability_ecmwf_ifs04": [20, 80],
         "weathercode_gfs_hrrr": [61, 63],
-        "weathercode_ecmwf_ifs04": [2, 65]
+        "weathercode_ecmwf_ifs04": [2, 65],
+        "cape_gfs_hrrr": [1400, 2200],
+        "cape_ecmwf_ifs04": [900, 1200]
       },
       "minutely_15": {
         "time": [1716124800, 1716125700, 1716126600, 1716127500],
@@ -186,6 +189,30 @@ enum Fixtures {
           { "time": 1716126000, "path": "/v2/radar/nowcast_c3d4" }
         ]
       }
+    }
+    """
+
+    static let nwsPointSample: String = """
+    {
+      "properties": { "gridId": "MLB" }
+    }
+    """
+
+    static let nwsProductListSample: String = """
+    {
+      "@graph": [
+        {
+          "id": "discussion-id",
+          "issuanceTime": "2026-09-13T17:32:00Z"
+        }
+      ]
+    }
+    """
+
+    static let nwsProductSample: String = """
+    {
+      "issuanceTime": "2026-09-13T17:32:00Z",
+      "productText": "Scattered afternoon thunderstorms are possible near the sea-breeze boundary."
     }
     """
 

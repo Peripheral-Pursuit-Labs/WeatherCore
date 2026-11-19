@@ -28,16 +28,20 @@ public struct PirateWeatherExtras: Sendable, Codable {
 public struct OpenMeteoExtras: Sendable, Codable {
     /// When multiple models were requested, per-model hourly precipitation in mm/hr keyed by model ID.
     public let perModelPrecipitation: [String: [Double?]]
-    /// Hourly timestamps corresponding to perModelPrecipitation values.
+    /// Per-model hourly precipitation probability (0...1), aligned with `hourlyTimes`.
+    public let perModelPrecipitationProbability: [String: [Double?]]
+    /// Hourly timestamps corresponding to the per-model values.
     public let hourlyTimes: [Date]
     public let modelsRequested: [String]
 
     public init(
         perModelPrecipitation: [String: [Double?]] = [:],
+        perModelPrecipitationProbability: [String: [Double?]] = [:],
         hourlyTimes: [Date] = [],
         modelsRequested: [String] = []
     ) {
         self.perModelPrecipitation = perModelPrecipitation
+        self.perModelPrecipitationProbability = perModelPrecipitationProbability
         self.hourlyTimes = hourlyTimes
         self.modelsRequested = modelsRequested
     }
@@ -108,10 +112,31 @@ public struct NWSExtras: Sendable, Codable {
     public let alerts: [WeatherAlert]
     public let gridpointOffice: String?
     public let forecastZone: String?
+    public let forecastDiscussion: NWSForecastDiscussion?
 
-    public init(alerts: [WeatherAlert], gridpointOffice: String? = nil, forecastZone: String? = nil) {
+    public init(
+        alerts: [WeatherAlert],
+        gridpointOffice: String? = nil,
+        forecastZone: String? = nil,
+        forecastDiscussion: NWSForecastDiscussion? = nil
+    ) {
         self.alerts = alerts
         self.gridpointOffice = gridpointOffice
         self.forecastZone = forecastZone
+        self.forecastDiscussion = forecastDiscussion
+    }
+}
+
+public struct NWSForecastDiscussion: Sendable, Codable, Identifiable {
+    public let id: String
+    public let office: String
+    public let issuedAt: Date?
+    public let text: String
+
+    public init(id: String, office: String, issuedAt: Date?, text: String) {
+        self.id = id
+        self.office = office
+        self.issuedAt = issuedAt
+        self.text = text
     }
 }

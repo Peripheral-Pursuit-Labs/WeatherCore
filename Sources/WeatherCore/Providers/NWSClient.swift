@@ -81,6 +81,7 @@ public struct NWSClient: Sendable {
             )
         }
 
+        let discussion = try? await forecastDiscussion(at: coord)
         return ProviderForecast(
             provider: .nws,
             fetchedAt: Date(),
@@ -88,8 +89,64 @@ public struct NWSClient: Sendable {
             minutely: nil,
             hourly: nil,
             daily: nil,
-            extras: .nws(NWSExtras(alerts: alerts))
+            extras: .nws(NWSExtras(
+                alerts: alerts,
+                gridpointOffice: discussion?.office,
+                forecastDiscussion: discussion
+            ))
         )
+    }
+
+    private func forecastDiscussion(at coord: Coordinate) async throws -> NWSForecastDiscussion? {
+        let pointURL = baseURL.appendingPathComponent("points/\(coord.latitude),\(coord.longitude)")
+        let pointData = try await fetchData(
+            from: pointURL,
+            cacheKey: "nws:point:\(coord.latitude),\(coord.longitude)",
+            ttl: 24 * 60 * 60
+        )
+        let point = try JSONDecoder().decode(NWSPointResponse.self, from: pointData)
+        guard let office = point.properties.gridId, !office.isEmpty else { return nil }
+
+        let listURL = baseURL.appendingPathComponent("products/types/AFD/locations/\(office)")
+        let listData = try await fetchData(
+            from: listURL,
+            cacheKey: "nws:afd-list:\(office)",
+            ttl: 30 * 60
+        )
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let products = try decoder.decode(NWSProductListResponse.self, from: listData)
+        guard let latest = products.products.max(by: {
+            ($0.issuanceTime ?? .distantPast) < ($1.issuanceTime ?? .distantPast)
+        }) else { return nil }
+
+        let productURL = baseURL.appendingPathComponent("products/\(latest.id)")
+        let productData = try await fetchData(
+            from: productURL,
+            cacheKey: "nws:afd:\(latest.id)",
+            ttl: 6 * 60 * 60
+        )
+        let product = try decoder.decode(NWSProductResponse.self, from: productData)
+        guard let text = product.productText, !text.isEmpty else { return nil }
+        return NWSForecastDiscussion(
+            id: latest.id,
+            office: office,
+            issuedAt: product.issuanceTime ?? latest.issuanceTime,
+            text: text
+        )
+    }
+
+    private func fetchData(from url: URL, cacheKey: String, ttl: TimeInterval) async throws -> Data {
+        if let cached = await cache?.get(cacheKey) { return cached }
+        var request = URLRequest(url: url, timeoutInterval: 15)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/geo+json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await http.data(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw ProviderError.http(status: response.statusCode, body: String(data: data, encoding: .utf8))
+        }
+        await cache?.set(cacheKey, data: data, ttl: ttl)
+        return data
     }
 
     private func mapSeverity(_ raw: String?) -> WeatherAlert.Severity {
@@ -119,6 +176,32 @@ public struct NWSClient: Sendable {
         default: .unknown
         }
     }
+}
+
+private struct NWSPointResponse: Decodable {
+    let properties: Properties
+
+    struct Properties: Decodable {
+        let gridId: String?
+    }
+}
+
+private struct NWSProductListResponse: Decodable {
+    let products: [Product]
+
+    enum CodingKeys: String, CodingKey {
+        case products = "@graph"
+    }
+
+    struct Product: Decodable {
+        let id: String
+        let issuanceTime: Date?
+    }
+}
+
+private struct NWSProductResponse: Decodable {
+    let issuanceTime: Date?
+    let productText: String?
 }
 
 private struct NWSAlertsResponse: Decodable {

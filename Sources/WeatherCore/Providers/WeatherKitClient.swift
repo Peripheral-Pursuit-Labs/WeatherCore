@@ -87,9 +87,9 @@ public struct WeatherKitClient: WeatherKitForecasting {
             temperature: current.temperature.converted(to: tempUnit),
             apparentTemperature: current.apparentTemperature.converted(to: tempUnit),
             humidity: current.humidity,
-            // WeatherKit reports intensity as a Measurement<UnitSpeed>; the analyzer
-            // converts to mm/hr, so pass it through unchanged.
-            precipitationIntensity: current.precipitationIntensity,
+            // WeatherKit reports intensity as a Measurement<UnitSpeed>; normalize it to a
+            // precipitation rate (mm/hr) so it shares one unit type with the other providers.
+            precipitationIntensity: Self.precipIntensity(from: current.precipitationIntensity),
             precipitationProbability: nil,   // not exposed on CurrentWeather
             precipitationType: nil,
             windSpeed: current.wind.speed.converted(to: speedUnit),
@@ -106,7 +106,7 @@ public struct WeatherKitClient: WeatherKitForecasting {
                 points: forecast.forecast.map { m in
                     MinutelyPoint(
                         time: m.date,
-                        intensity: m.precipitationIntensity,
+                        intensity: Self.precipIntensity(from: m.precipitationIntensity),
                         probability: m.precipitationChance
                     )
                 },
@@ -125,7 +125,7 @@ public struct WeatherKitClient: WeatherKitForecasting {
                     // mm over one hour equals mm/hr numerically.
                     precipitationIntensity: Measurement(
                         value: h.precipitationAmount.converted(to: .millimeters).value,
-                        unit: .millimetersPerHour
+                        unit: UnitPrecipitationIntensity.millimetersPerHour
                     ),
                     precipitationProbability: h.precipitationChance,
                     precipitationType: mapPrecip(h.precipitation),
@@ -173,6 +173,15 @@ public struct WeatherKitClient: WeatherKitForecasting {
             hourly: hourlyForecast,
             daily: dailyForecast,
             extras: .weatherKit(extras)
+        )
+    }
+
+    /// Converts WeatherKit's `Measurement<UnitSpeed>` precipitation rate into the shared
+    /// `UnitPrecipitationIntensity` (mm/hr), via the m/s↔mm/hr helper below.
+    private static func precipIntensity(from speed: Measurement<UnitSpeed>) -> Measurement<UnitPrecipitationIntensity> {
+        Measurement(
+            value: speed.converted(to: .millimetersPerHour).value,
+            unit: UnitPrecipitationIntensity.millimetersPerHour
         )
     }
 

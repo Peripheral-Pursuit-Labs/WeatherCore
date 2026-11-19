@@ -6,6 +6,8 @@ public struct OpenMeteoClient: Sendable {
         case best                 // Open-Meteo's auto-selected best model
         case gfsHrrr              = "gfs_hrrr"
         case gfsGlobal            = "gfs_global"
+        /// NOAA National Blend of Models, CONUS only. A calibrated multi-model blend.
+        case ncepNbmConus         = "ncep_nbm_conus"
         case ecmwfIfs04           = "ecmwf_ifs04"
         case ecmwfIfs025          = "ecmwf_ifs025"
         case iconD2               = "icon_d2"
@@ -38,7 +40,7 @@ public struct OpenMeteoClient: Sendable {
         let windUnitParam = units == .metric ? "ms" : "mph"
         let precipUnitParam = units == .metric ? "mm" : "inch"
 
-        let hourlyVars = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,precipitation_probability,weathercode,cloudcover,windspeed_10m,windgusts_10m,winddirection_10m,pressure_msl,visibility,uv_index"
+        let hourlyVars = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,precipitation_probability,weathercode,cloudcover,windspeed_10m,windgusts_10m,winddirection_10m,pressure_msl,visibility,uv_index,cape"
         let dailyVars = "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,sunrise,sunset,weathercode"
         let currentVars = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weathercode,cloudcover,windspeed_10m,windgusts_10m,winddirection_10m,pressure_msl"
 
@@ -147,6 +149,7 @@ private struct OpenMeteoResponse: Decodable {
         let pressure_msl: [Double?]?
         let visibility: [Double?]?
         let uv_index: [Double?]?
+        let cape: [Double?]?
     }
 
     struct Minutely: Decodable {
@@ -169,7 +172,9 @@ private struct OpenMeteoResponse: Decodable {
     func toProviderForecast(units: UnitSystem, modelsRequested: [OpenMeteoClient.Model]) -> ProviderForecast {
         let tempUnit: UnitTemperature = units == .metric ? .celsius : .fahrenheit
         let speedUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour
-        let precipUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour // intensity uses speed-like dimension
+        // Open-Meteo "precipitation" is depth over the hour: mm (metric) or inches (imperial),
+        // i.e. a precipitation rate in mm/hr or in/hr.
+        let precipUnit: UnitPrecipitationIntensity = units == .metric ? .millimetersPerHour : .inchesPerHour
 
         // current
         let currentSnap = current.map { c in
@@ -211,7 +216,8 @@ private struct OpenMeteoResponse: Decodable {
                     cloudCover: at(h.cloudcover).map { $0 / 100 },
                     pressure: at(h.pressure_msl).map { Measurement(value: $0, unit: .hectopascals) },
                     uvIndex: at(h.uv_index),
-                    visibility: at(h.visibility).map { Measurement(value: $0, unit: .meters) }
+                    visibility: at(h.visibility).map { Measurement(value: $0, unit: .meters) },
+                    cape: at(h.cape)
                 )
             }
         } ?? []
@@ -296,7 +302,7 @@ private enum OpenMeteoMultiModel {
 
         let tempUnit: UnitTemperature = units == .metric ? .celsius : .fahrenheit
         let speedUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour
-        let precipUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour
+        let precipUnit: UnitPrecipitationIntensity = units == .metric ? .millimetersPerHour : .inchesPerHour
 
         let hourly = root["hourly"] as? [String: Any]
         let current = root["current"] as? [String: Any]
@@ -324,7 +330,8 @@ private enum OpenMeteoMultiModel {
                 cloudCover: dbl(hourly, "cloudcover" + suffix, i).map { $0 / 100 },
                 pressure: dbl(hourly, "pressure_msl" + suffix, i).map { Measurement(value: $0, unit: .hectopascals) },
                 uvIndex: dbl(hourly, "uv_index" + suffix, i),
-                visibility: dbl(hourly, "visibility" + suffix, i).map { Measurement(value: $0, unit: .meters) }
+                visibility: dbl(hourly, "visibility" + suffix, i).map { Measurement(value: $0, unit: .meters) },
+                cape: dbl(hourly, "cape" + suffix, i)
             )
         }
 
@@ -372,13 +379,20 @@ private enum OpenMeteoMultiModel {
         }
 
         // Every model's hourly precipitation — the basis for intra-provider disagreement.
-        var perModel: [String: [Double?]] = [:]
+        // Extras are normalized regardless of the units requested from Open-Meteo.
+        let millimetersPerUnit = units == .metric ? 1.0 : 25.4
+        var perModelIntensity: [String: [Double?]] = [:]
+        var perModelProbability: [String: [Double?]] = [:]
         for model in models {
-            perModel[model.rawValue] = doubles(hourly, "precipitation_" + model.apiValue)
+            perModelIntensity[model.rawValue] = doubles(hourly, "precipitation_" + model.apiValue)
+                .map { $0.map { $0 * millimetersPerUnit } }
+            perModelProbability[model.rawValue] = doubles(hourly, "precipitation_probability_" + model.apiValue)
+                .map { $0.map { $0 / 100 } }
         }
 
         let extras = OpenMeteoExtras(
-            perModelPrecipitation: perModel,
+            perModelPrecipitation: perModelIntensity,
+            perModelPrecipitationProbability: perModelProbability,
             hourlyTimes: hourlyTimes.map(Date.init(timeIntervalSince1970:)),
             modelsRequested: models.map(\.rawValue)
         )

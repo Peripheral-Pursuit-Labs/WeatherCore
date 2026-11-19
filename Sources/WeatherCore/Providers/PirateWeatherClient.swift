@@ -134,6 +134,8 @@ private struct PirateResponse: Decodable {
     func toProviderForecast(units: UnitSystem) -> ProviderForecast {
         let tempUnit: UnitTemperature = units == .metric ? .celsius : .fahrenheit
         let speedUnit: UnitSpeed = units == .metric ? .metersPerSecond : .milesPerHour
+        // Pirate Weather reports precipIntensity in mm/hr (metric) or in/hr (imperial).
+        let precipUnit: UnitPrecipitationIntensity = units == .metric ? .millimetersPerHour : .inchesPerHour
         let pressureUnit: UnitPressure = .hectopascals
         let lengthUnit: UnitLength = units == .metric ? .kilometers : .miles
 
@@ -143,7 +145,7 @@ private struct PirateResponse: Decodable {
                 temperature: c.temperature.map { Measurement(value: $0, unit: tempUnit) },
                 apparentTemperature: c.apparentTemperature.map { Measurement(value: $0, unit: tempUnit) },
                 humidity: c.humidity,
-                precipitationIntensity: c.precipIntensity.map { Measurement(value: $0, unit: speedUnit) },
+                precipitationIntensity: c.precipIntensity.map { Measurement(value: $0, unit: precipUnit) },
                 precipitationProbability: c.precipProbability,
                 precipitationType: mapPrecipType(c.precipType),
                 windSpeed: c.windSpeed.map { Measurement(value: $0, unit: speedUnit) },
@@ -161,7 +163,7 @@ private struct PirateResponse: Decodable {
                 points: m.data.map { p in
                     MinutelyPoint(
                         time: Date(timeIntervalSince1970: p.time),
-                        intensity: p.precipIntensity.map { Measurement(value: $0, unit: speedUnit) },
+                        intensity: p.precipIntensity.map { Measurement(value: $0, unit: precipUnit) },
                         probability: p.precipProbability
                     )
                 },
@@ -176,7 +178,7 @@ private struct PirateResponse: Decodable {
                     temperature: c.temperature.map { Measurement(value: $0, unit: tempUnit) },
                     apparentTemperature: c.apparentTemperature.map { Measurement(value: $0, unit: tempUnit) },
                     humidity: c.humidity,
-                    precipitationIntensity: c.precipIntensity.map { Measurement(value: $0, unit: speedUnit) },
+                    precipitationIntensity: c.precipIntensity.map { Measurement(value: $0, unit: precipUnit) },
                     precipitationProbability: c.precipProbability,
                     precipitationType: mapPrecipType(c.precipType),
                     windSpeed: c.windSpeed.map { Measurement(value: $0, unit: speedUnit) },

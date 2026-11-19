@@ -24,17 +24,17 @@ targets: [
 
 ## Design
 
-Five providers, one unified call:
+Six providers, one unified call:
 
 - **Pirate Weather** — Dark Sky-shaped JSON, HRRR/NBM-backed, minute-by-minute precipitation
 - **Open-Meteo** — multi-model queries (GFS HRRR, ECMWF, ICON, etc.), 15-minute precipitation granularity, no API key
 - **WeatherKit** — Apple's native forecast (current/minute/hourly/daily). Requires the WeatherKit entitlement; no API key
 - **RainViewer** — radar tiles and 30-minute nowcast frames
-- **NWS** — active weather alerts (severe thunderstorm, flash flood warnings)
+- **NWS** — active weather alerts plus the latest local Area Forecast Discussion
 
 Each provider client is independently usable. The top-level `WeatherClient` orchestrates them concurrently, captures per-provider failures without throwing, and **automatically computes a disagreement report** when called with `unifiedForecast()`.
 
-Disagreement is computed across the three providers that produce comparable point forecasts — **Pirate Weather, Open-Meteo, and WeatherKit**. RainViewer (radar) and NWS (alerts) carry no probability/intensity values to compare. With ≥2 of the forecast providers available, the analyzer aligns their timestamps and quantifies how much they disagree.
+Disagreement is computed across the three providers that produce comparable point forecasts — **Pirate Weather, Open-Meteo, and WeatherKit**. RainViewer (radar) and NWS (alerts) carry no probability/intensity values to compare. With ≥2 forecast providers available, the analyzer aligns their timestamps and quantifies how much they disagree.
 
 ## Quick start
 

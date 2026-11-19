@@ -40,7 +40,7 @@ final class MockWeatherKitClient: WeatherKitForecasting, @unchecked Sendable {
             let snapshots = (0..<24).map { i in
                 WeatherSnapshot(
                     time: now.addingTimeInterval(TimeInterval(i * 3600)),
-                    precipitationIntensity: Measurement(value: 0.2, unit: UnitSpeed.metersPerSecond),
+                    precipitationIntensity: Measurement(value: 0.2, unit: UnitPrecipitationIntensity.millimetersPerHour),
                     precipitationProbability: 0.8
                 )
             }

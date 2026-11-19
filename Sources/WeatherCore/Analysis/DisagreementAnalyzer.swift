@@ -66,7 +66,7 @@ public struct DisagreementAnalyzer: Sendable {
             }
 
             let spread = (probs.values.max() ?? 0) - (probs.values.min() ?? 0)
-            let level = classifyLevel(probabilitySpread: spread, intensities: intensities)
+            let level = classifyLevel(probabilitySpread: spread)
             consensus[window] = median(of: Array(probs.values))
 
             windowReports.append(DisagreementReport.WindowDisagreement(
@@ -115,7 +115,7 @@ public struct DisagreementAnalyzer: Sendable {
             guard !probs.isEmpty else { continue }
 
             let spread = (probs.values.max() ?? 0) - (probs.values.min() ?? 0)
-            let level = classifyLevel(probabilitySpread: spread, intensities: intensities)
+            let level = classifyLevel(probabilitySpread: spread)
             consensus[window] = median(of: Array(probs.values))
 
             windowReports.append(DisagreementReport.WindowDisagreement(
@@ -164,7 +164,7 @@ public struct DisagreementAnalyzer: Sendable {
             guard !probs.isEmpty else { continue }
 
             let spread = (probs.values.max() ?? 0) - (probs.values.min() ?? 0)
-            let level = classifyLevel(probabilitySpread: spread, intensities: accumulations)
+            let level = classifyLevel(probabilitySpread: spread)
             consensus[window] = median(of: Array(probs.values))
 
             windowReports.append(DisagreementReport.WindowDisagreement(
@@ -186,15 +186,14 @@ public struct DisagreementAnalyzer: Sendable {
 
     // MARK: - Helpers
 
-    private func classifyLevel(probabilitySpread spread: Double, intensities: [ProviderID: Double]) -> DisagreementReport.Level {
-        // Qualitative disagreement: some providers say rain, some say dry
-        let raining = intensities.values.filter { $0 > 0.1 }.count
-        let dry = intensities.values.filter { $0 <= 0.1 }.count
-        if raining > 0 && dry > 0 { return .high }
-
+    /// Classifies disagreement purely on probability spread (max − min across providers).
+    /// Spread-based thresholds keep a single outlier model from dominating: a lone dissenter
+    /// reads as `moderate`, not `high`. (Previously any rain-vs-dry split forced `high`, which
+    /// over-flagged whenever one model diverged from an otherwise-agreeing majority.)
+    private func classifyLevel(probabilitySpread spread: Double) -> DisagreementReport.Level {
         switch spread {
-        case ..<0.15: return .low
-        case 0.15..<0.40: return .moderate
+        case ..<0.25: return .low
+        case 0.25..<0.55: return .moderate
         default: return .high
         }
     }
@@ -228,11 +227,4 @@ public struct DisagreementAnalyzer: Sendable {
         let n = sorted.count
         return n % 2 == 0 ? (sorted[n/2 - 1] + sorted[n/2]) / 2 : sorted[n/2]
     }
-}
-
-private extension UnitSpeed {
-    static let millimetersPerHour: UnitSpeed = UnitSpeed(
-        symbol: "mm/h",
-        converter: UnitConverterLinear(coefficient: 1.0 / 3_600_000.0) // mm/hr to m/s
-    )
 }
