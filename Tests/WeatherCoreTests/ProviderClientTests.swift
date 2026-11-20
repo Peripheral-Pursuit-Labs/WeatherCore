@@ -88,6 +88,35 @@ struct ProviderClientTests {
         #expect(extras.modelsRequested == ["gfs_hrrr", "ecmwf_ifs04"])
     }
 
+    @Test func openMeteoBorrowsMinutelyProbabilityWhenPrimaryModelHasNone() async throws {
+        let json = """
+        {
+          "hourly": { "time": [1716127200], "precipitation_ncep_rrfs_conus": [0.1], "precipitation_ncep_nbm_conus": [0.2] },
+          "minutely_15": {
+            "time": [1716124800, 1716125700],
+            "precipitation_ncep_rrfs_conus": [0.05, 0.2],
+            "precipitation_probability_ncep_rrfs_conus": [null, null],
+            "precipitation_ncep_nbm_conus": [0.0, 0.1],
+            "precipitation_probability_ncep_nbm_conus": [30, 55]
+          }
+        }
+        """
+        let mock = MockHTTPClient()
+        mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(json)))
+
+        let client = OpenMeteoClient(http: mock)
+        let forecast = try await client.forecast(
+            at: Coordinate(latitude: 28.8, longitude: -81.27),
+            units: .metric,
+            models: [.ncepRrfsConus, .ncepNbmConus]
+        )
+
+        // Amounts come from the first model (RRFS); the chance is borrowed from NBM.
+        let points = forecast.minutely?.points ?? []
+        #expect(points.map { $0.intensity?.value } == [0.05, 0.2])
+        #expect(points.map(\.probability) == [0.3, 0.55])
+    }
+
     @Test func openMeteoRequestIncludesAllConfiguredModels() async throws {
         let mock = MockHTTPClient()
         mock.stubURLContaining("open-meteo.com", with: .init(data: Fixtures.data(Fixtures.openMeteoSample)))

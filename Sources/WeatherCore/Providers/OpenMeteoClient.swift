@@ -4,7 +4,11 @@ import OSLog
 public struct OpenMeteoClient: Sendable {
     public enum Model: String, Sendable, CaseIterable, Codable {
         case best                 // Open-Meteo's auto-selected best model
+        /// Discontinued by Open-Meteo at the end of November 2026; use `ncepRrfsConus`.
         case gfsHrrr              = "gfs_hrrr"
+        /// NOAA Rapid Refresh Forecast System, CONUS, 3 km. HRRR's successor, with native
+        /// 15-minute precipitation. It carries no precipitation probability.
+        case ncepRrfsConus        = "ncep_rrfs_conus"
         case gfsGlobal            = "gfs_global"
         /// NOAA National Blend of Models, CONUS only. A calibrated multi-model blend.
         case ncepNbmConus         = "ncep_nbm_conus"
@@ -354,12 +358,17 @@ private enum OpenMeteoMultiModel {
             )
         }
 
+        // Some models (RRFS) carry no probability. Borrow it from the next requested model
+        // that has one, so 15-minute amounts still come with a chance.
         let minutelyTimes = times(minutely?["time"])
         let minutelyPoints: [MinutelyPoint] = minutelyTimes.indices.map { i in
-            MinutelyPoint(
+            let probability = models.lazy
+                .compactMap { dbl(minutely, "precipitation_probability_" + $0.apiValue, i) }
+                .first
+            return MinutelyPoint(
                 time: Date(timeIntervalSince1970: minutelyTimes[i]),
                 intensity: dbl(minutely, "precipitation" + suffix, i).map { Measurement(value: $0, unit: precipUnit) },
-                probability: dbl(minutely, "precipitation_probability" + suffix, i).map { $0 / 100 }
+                probability: probability.map { $0 / 100 }
             )
         }
 
